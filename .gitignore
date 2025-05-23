@@ -1,0 +1,30 @@
+# Node modules
+node_modules/
+
+# Ignore all .env files, even in subfolders
+**/.env
+**/.env.*
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS system files
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+dist/
+build/
+
+# Uploaded files
+uploads/
+
+# VSCode settings
+.vscode/
+
+# Optional: coverage or test output
+coverage/
