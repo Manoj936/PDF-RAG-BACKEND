@@ -1,6 +1,17 @@
 version: '3.8'
 
 services:
+  app:
+    build: .
+    container_name: pdf-rag-backend
+    ports:
+      - "8000:8000"
+    depends_on:
+      - redis
+      - qdrant
+    env_file:
+      - .env
+
   redis:
     image: redis:latest
     ports:
@@ -10,4 +21,3 @@ services:
     image: qdrant/qdrant
     ports:
       - "6333:6333"
-
