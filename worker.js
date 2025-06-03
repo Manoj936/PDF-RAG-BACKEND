@@ -29,7 +29,7 @@ const worker = new Worker(
       });
       const vectorStore = await QdrantVectorStore.fromExistingCollection(embeddings, {
         url: process.env.QDRANT_STORE,
-        collectionName: process.env.QDRANT_COLLECTION1,
+        collectionName: `pdf_${data.fileId}`,  // dynamic collection per file
       });
       const splitter = new RecursiveCharacterTextSplitter({
         chunkSize: 500,  // smaller chunk size

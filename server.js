@@ -71,7 +71,7 @@ app.post("/upload/pdf", upload.single("pdf"), async (req, res) => {
 
 app.get("/chat", async (req, res) => {
   const userQuery = req.query.message;
-
+  const collection = req.query.fileId
   if (!userQuery) {
     return res.status(200).json({ message: 'please provide your queries', status: false })
   }
@@ -83,11 +83,12 @@ app.get("/chat", async (req, res) => {
 
   const vectorStore = await QdrantVectorStore.fromExistingCollection(embeddings, {
     url: process.env.QDRANT_STORE,
-    collectionName: process.env.QDRANT_COLLECTION1,
+    collectionName: `pdf_${collection}`,
   });
 
   const retriver = vectorStore.asRetriever({
     k: 2,
+
   });
 
   const result = await retriver.invoke(userQuery);
