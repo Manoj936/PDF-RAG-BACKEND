@@ -20,11 +20,11 @@ Thumbs.db
 dist/
 build/
 
-# Uploaded files
-uploads/
+
 
 # VSCode settings
 .vscode/
 
 # Optional: coverage or test output
 coverage/
+package-lock.json

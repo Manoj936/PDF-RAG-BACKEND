@@ -1,20 +1,27 @@
-const express = require("express");
+import express from "express";
 const app = express();
-const cors = require("cors");
-const multer = require("multer");
-
-
-const startQdrantCleanupCron = require('./helper/qdrantCleaner') // 👈 import the cron job
-const redis = require('./helper/redisClient')
+import cors from "cors";
+import multer from "multer";
+import redis from "./helper/redisClient.js";
 app.use(cors());
 app.use(express.json());
-
-const { OpenAIEmbeddings } = require('@langchain/openai');
-const { QdrantVectorStore } = require('@langchain/qdrant');
-
-const OpenAI = require('openai');
-const bullmq = require("bullmq");
-const dotenv = require("dotenv");
+import { ChatOpenAI } from "@langchain/openai";
+import { OpenAIEmbeddings } from "@langchain/openai";
+import { PromptTemplate } from "@langchain/core/prompts";
+import { createClient } from "@supabase/supabase-js";
+import { SupabaseVectorStore } from "@langchain/community/vectorstores/supabase";
+import OpenAI from "openai";
+import bullmq from "bullmq";
+import dotenv from "dotenv";
+import { standaloneQuestionGenerator } from "./helper/standaloneClient.js";
+const openAIApiKey = process.env.OPENAI_KEY;
+const supabaseUrl = process.env.SUPABASE_PROJECT_URL;
+const supabaseApikey = process.env.SUPABASE_API_KEY;
+const embeddings = new OpenAIEmbeddings({
+  model: "text-embedding-3-small",
+  apiKey: openAIApiKey,
+});
+const llm = new ChatOpenAI({ openAIApiKey });
 dotenv.config();
 //storage setup
 const storage = multer.diskStorage({
@@ -28,111 +35,92 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage: storage });
 
-const openAiclient = new OpenAI({
-  apiKey: process.env.OPENAI_KEY,
-});
 //server setup
 app.listen(8000, () => {
   console.log("Server is running on port 8000");
 });
 
-// Start Qdrant cleanup scheduler
-startQdrantCleanupCron(); // ✅ runs every hour
+
 
 const pdfUploadQueue = new bullmq.Queue(process.env.REDIS_QUEUE_NAME, {
-  connection: {
-    host: 'localhost',
-    port: '6379',
-  },
+  connection:  redis
 });
 
 // receive files using multer api
 app.post("/upload/pdf", upload.single("pdf"), async (req, res) => {
   const fileId = `${Date.now()}-${req.file.originalname}`;
   // Save initial status
-  await redis.set(`status:${fileId}`, 'processing');
+  await redis.set(`status:${fileId}`, "processing");
 
   await pdfUploadQueue.add(
-    'file-ready',
+    "file-ready",
     JSON.stringify({
       filename: req.file.originalname,
       destination: req.file.destination,
       path: req.file.path,
-      fileId
+      fileId,
     })
   );
 
   return res.json({ message: "uploaded", fileId });
 });
 
-
-
 // chat api which converts user query to embedded vectors and return SIMILAR TYPE results
 
 app.get("/chat", async (req, res) => {
-  const userQuery = req.query.message;
-  const collection = req.query.fileId
-  if (!userQuery) {
-    return res.status(200).json({ message: 'please provide your queries', status: false })
+  const userMSg = req.query.message;
+  const collection = req.query.fileId;
+  if (!userMSg) {
+    return res
+      .status(200)
+      .json({ message: "please provide your queries", status: false });
   }
 
-  const embeddings = new OpenAIEmbeddings({
-    model: 'text-embedding-3-small',
-    apiKey: process.env.OPENAI_KEY,
+  // Process user query to standalone question
+  const userQuery = await standaloneQuestionGenerator(userMSg);
+
+  //SETTING UP VECTOR STORE AND RETRIVING
+  const supClient = createClient(supabaseUrl, supabaseApikey);
+
+  const vectorStore = new SupabaseVectorStore(embeddings, {
+    client: supClient, // 👈 fix here
+    tableName: "documents",
+    queryName: "match_documents",
   });
 
-  const vectorStore = await QdrantVectorStore.fromExistingCollection(embeddings, {
-    url: process.env.QDRANT_STORE,
-    collectionName: `pdf_${collection}`,
-  });
-
-  const retriver = vectorStore.asRetriever({
-    k: 2,
-
-  });
+  const retriver = vectorStore.asRetriever();
 
   const result = await retriver.invoke(userQuery);
 
+  const LLM_PROMPT = `You are a helpful and enthusiastic support bot who can answer a given question about the context provided. Try to find the answer in detail from the context. If you really don't know the answer, say "I'm sorry, I don't know find an appropriate answer". Don't try to make up an answer. Always speak as if you were chatting to a friend. 
+    Context: {result}
+    Question: {question}`;
 
-  const PROMPT = `You are helfull AI Assistant who answeres the user query based on the available context from PDF File.
-Also if you dont have any context , Please ask user to upload pdf file. 
-  Context:
-  ${JSON.stringify(result)}
-  `;
+  const LLMpromtTemplate = PromptTemplate.fromTemplate(LLM_PROMPT);
 
+  const AIRESPONSE_CHAIN = LLMpromtTemplate.pipe(llm);
 
-
-  const chatResult = await openAiclient.chat.completions.create({
-    model: 'gpt-4.1',
-    messages: [
-      { role: 'system', content: PROMPT },
-      { role: 'user', content: userQuery },
-    ],
+  const AIResponse = await AIRESPONSE_CHAIN.invoke({
+    result: JSON.stringify(result),
+    question: userMSg,
   });
+  console.log(AIResponse);
 
   return res.json({
-    message: chatResult.choices[0].message.content,
+    message: AIResponse.content,
     docs: result,
   });
-
-
-})
+});
 
 //check the file processing status
-app.get('/status/:fileId', async (req, res) => {
+app.get("/status/:fileId", async (req, res) => {
   const status = await redis.get(`status:${req.params.fileId}`);
   return res.json({ status });
 });
-
-
 
 // clean up redis keys
 // make the chat ui
 // take context of previous chats
 //chat screen ui
 //add firebase auth
-// 
-
-
-
-
+//

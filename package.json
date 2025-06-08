@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "",
   "main": "server.js",
+  "type": "module",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "node server.js",
@@ -18,6 +19,7 @@
     "@langchain/qdrant": "^0.1.2",
     "@langchain/textsplitters": "^0.1.0",
     "@qdrant/js-client-rest": "^1.14.0",
+    "@supabase/supabase-js": "^2.50.0",
     "bullmq": "^5.53.0",
     "cors": "^2.8.5",
     "dotenv": "^16.5.0",

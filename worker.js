@@ -1,72 +1,78 @@
-const { Worker } = require("bullmq");
-const redis = require('./helper/redisClient');
-// Langchain imports
+import { Worker } from "bullmq";
+import redis from "./helper/redisClient.js";
+import { createClient } from "@supabase/supabase-js";
 
-const { OpenAIEmbeddings } = require('@langchain/openai');
-const { QdrantVectorStore } = require('@langchain/qdrant');
-const { PDFLoader } = require('@langchain/community/document_loaders/fs/pdf');
-const { RecursiveCharacterTextSplitter } = require("langchain/text_splitter");
-const fs = require('fs')
-const dotenv = require("dotenv");
+// Langchain imports
+import { SupabaseVectorStore } from "@langchain/community/vectorstores/supabase";
+import { OpenAIEmbeddings } from "@langchain/openai";
+import { PDFLoader } from "@langchain/community/document_loaders/fs/pdf";
+import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
+
+import fs from "fs";
+import dotenv from "dotenv";
+
 dotenv.config();
+
+const openAIKey = process.env.OPENAI_KEY;
+const supabaseUrl = process.env.SUPABASE_PROJECT_URL;
+const supabaseApikey = process.env.SUPABASE_API_KEY;
+
+const embeddings = new OpenAIEmbeddings({
+  model: "text-embedding-3-small",
+  apiKey: openAIKey,
+});
 
 //subscriber for doc upload events
 const worker = new Worker(
   process.env.REDIS_QUEUE_NAME,
   async (job) => {
-    console.log(JSON.parse(job.data));
     const data = JSON.parse(job.data);
     try {
       // Pdf processing
       const loader = new PDFLoader(data.path);
       const docs = await loader.load();
-
-
-
-      const embeddings = new OpenAIEmbeddings({
-        model: 'text-embedding-3-small',
-        apiKey: process.env.OPENAI_KEY,
-      });
-      const vectorStore = await QdrantVectorStore.fromExistingCollection(embeddings, {
-        url: process.env.QDRANT_STORE,
-        collectionName: `pdf_${data.fileId}`,  // dynamic collection per file
-      });
+      console.log(typeof docs);
       const splitter = new RecursiveCharacterTextSplitter({
-        chunkSize: 500,  // smaller chunk size
+        chunkSize: 500, // smaller chunk size
+        separators: ["\n\n", "\n", " ", ""],
         chunkOverlap: 50,
       });
-
       const splitDocs = await splitter.splitDocuments(docs);
-      // ✅ Batch insertion
+
+      const supClient = createClient(supabaseUrl, supabaseApikey);
+
+      // // ✅ Batch insertion
       const BATCH_SIZE = 100;
       for (let i = 0; i < splitDocs.length; i += BATCH_SIZE) {
         const batch = splitDocs.slice(i, i + BATCH_SIZE);
-        await vectorStore.addDocuments(batch);
+
+        //Save to pgvector
+        await SupabaseVectorStore.fromDocuments(batch, embeddings, {
+          client: supClient, // 👈 fix here
+          tableName: "documents",
+        });
       }
-      await redis.set(`status:${data.fileId}`, 'processed');
+
+      await redis.set(`status:${data.fileId}`, "processed");
       console.log(`All docs are added to vector store ✅`);
 
       // 🧹 Delete file after processing
       await fs.unlink(data.path, (err) => {
         if (err) {
-          console.error('❌ Error deleting file:', err);
+          console.error("❌ Error deleting file:", err);
         } else {
           console.log(`🗑️ Deleted file: ${data.path}`);
         }
       });
-
+    } catch (e) {
+      console.log("error", e);
+      await redis.set(`status:${data.fileId}`, "failed");
     }
-    catch (e) {
-      console.log('error', e)
-      await redis.set(`status:${data.fileId}`, 'failed');
-    }
-
   },
   {
     concurrency: 100,
     connection: {
-      host: 'localhost',
-      port: 6379,
+     url: `rediss://default:${process.env.REDIS_PASS}@real-stinkbug-39224.upstash.io:6379`, 
     },
   }
 );
