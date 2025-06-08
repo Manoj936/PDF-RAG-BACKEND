@@ -69,7 +69,7 @@ app.post("/upload/pdf", upload.single("pdf"), async (req, res) => {
 
 app.get("/chat", async (req, res) => {
   const userMSg = req.query.message;
-  const collection = req.query.fileId;
+  const fileId = req.query.fileId;
   if (!userMSg) {
     return res
       .status(200)
@@ -86,6 +86,7 @@ app.get("/chat", async (req, res) => {
     client: supClient, // 👈 fix here
     tableName: "documents",
     queryName: "match_documents",
+    filter: { file_id: fileId },
   });
 
   const retriver = vectorStore.asRetriever();

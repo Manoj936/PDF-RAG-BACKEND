@@ -44,7 +44,16 @@ const worker = new Worker(
       // // ✅ Batch insertion
       const BATCH_SIZE = 100;
       for (let i = 0; i < splitDocs.length; i += BATCH_SIZE) {
-        const batch = splitDocs.slice(i, i + BATCH_SIZE);
+        const batch = splitDocs.slice(i, i + BATCH_SIZE).map((doc) => {
+          // Add file_id to metadata
+          return {
+            ...doc,
+            metadata: {
+              ...(doc.metadata || {}),
+              file_id: data.fileId, // 👈 your custom file ID
+            },
+          };
+        });
 
         //Save to pgvector
         await SupabaseVectorStore.fromDocuments(batch, embeddings, {
@@ -66,13 +75,20 @@ const worker = new Worker(
       });
     } catch (e) {
       console.log("error", e);
+      await fs.unlink(data.path, (err) => {
+        if (err) {
+          console.error("❌ Error deleting file:", err);
+        } else {
+          console.log(`🗑️ Deleted file: ${data.path}`);
+        }
+      });
       await redis.set(`status:${data.fileId}`, "failed");
     }
   },
   {
     concurrency: 100,
     connection: {
-     url: `rediss://default:${process.env.REDIS_PASS}@real-stinkbug-39224.upstash.io:6379`, 
+      url: `rediss://default:${process.env.REDIS_PASS}@real-stinkbug-39224.upstash.io:6379`,
     },
   }
 );
