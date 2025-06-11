@@ -51,6 +51,7 @@ const worker = new Worker(
             metadata: {
               ...(doc.metadata || {}),
               file_id: data.fileId, // 👈 your custom file ID
+              email: data.email ? data.email : null, // 👈 your custom account ID
             },
           };
         });

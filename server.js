@@ -10,7 +10,6 @@ import { OpenAIEmbeddings } from "@langchain/openai";
 import { PromptTemplate } from "@langchain/core/prompts";
 import { createClient } from "@supabase/supabase-js";
 import { SupabaseVectorStore } from "@langchain/community/vectorstores/supabase";
-import OpenAI from "openai";
 import bullmq from "bullmq";
 import dotenv from "dotenv";
 import { standaloneQuestionGenerator } from "./helper/standaloneClient.js";
@@ -23,6 +22,9 @@ const embeddings = new OpenAIEmbeddings({
 });
 const llm = new ChatOpenAI({ openAIApiKey });
 dotenv.config();
+
+//SETTING UP SUPABASE CLIENT
+const supClient = createClient(supabaseUrl, supabaseApikey);
 //storage setup
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
@@ -40,15 +42,14 @@ app.listen(8000, () => {
   console.log("Server is running on port 8000");
 });
 
-
-
 const pdfUploadQueue = new bullmq.Queue(process.env.REDIS_QUEUE_NAME, {
-  connection:  redis
+  connection: redis,
 });
 
 // receive files using multer api
 app.post("/upload/pdf", upload.single("pdf"), async (req, res) => {
   const fileId = `${Date.now()}-${req.file.originalname}`;
+  const email = req.body.email;
   // Save initial status
   await redis.set(`status:${fileId}`, "processing");
 
@@ -59,6 +60,7 @@ app.post("/upload/pdf", upload.single("pdf"), async (req, res) => {
       destination: req.file.destination,
       path: req.file.path,
       fileId,
+      email,
     })
   );
 
@@ -70,6 +72,7 @@ app.post("/upload/pdf", upload.single("pdf"), async (req, res) => {
 app.get("/chat", async (req, res) => {
   const userMSg = req.query.message;
   const fileId = req.query.fileId;
+  const email = req.query.email;
   if (!userMSg) {
     return res
       .status(200)
@@ -79,23 +82,23 @@ app.get("/chat", async (req, res) => {
   // Process user query to standalone question
   const userQuery = await standaloneQuestionGenerator(userMSg);
 
-  //SETTING UP VECTOR STORE AND RETRIVING
-  const supClient = createClient(supabaseUrl, supabaseApikey);
-
   const vectorStore = new SupabaseVectorStore(embeddings, {
     client: supClient, // 👈 fix here
     tableName: "documents",
     queryName: "match_documents",
-    filter: { file_id: fileId },
+    filter: { file_id: fileId, email: email }, // 👈 filter by file_id and email
   });
 
   const retriver = vectorStore.asRetriever();
 
   const result = await retriver.invoke(userQuery);
-
+  const chatHistory = await getPrevConversation(email, fileId);
+  console.log(chatHistory , "🧠")
   const LLM_PROMPT = `You are a helpful and enthusiastic support bot who can answer a given question about the context provided. Try to find the answer in detail from the context. If you really don't know the answer, say "I'm sorry, I don't know find an appropriate answer". Don't try to make up an answer. Always speak as if you were chatting to a friend. 
     Context: {result}
-    Question: {question}`;
+    Previous Conversation: {chatHistory}
+    Question: {question}
+    User's Registered Email: {email}`;
 
   const LLMpromtTemplate = PromptTemplate.fromTemplate(LLM_PROMPT);
 
@@ -104,9 +107,14 @@ app.get("/chat", async (req, res) => {
   const AIResponse = await AIRESPONSE_CHAIN.invoke({
     result: JSON.stringify(result),
     question: userMSg,
+    chatHistory : chatHistory,
+    email: email,
   });
-  console.log(AIResponse);
-
+  //chat history can be added here
+  await supClient.from("chat_history").insert([
+    { email, file_id: fileId, role: "user", message: userMSg },
+    { email, file_id: fileId, role: "ai", message: AIResponse.content },
+  ]);
   return res.json({
     message: AIResponse.content,
     docs: result,
@@ -119,9 +127,17 @@ app.get("/status/:fileId", async (req, res) => {
   return res.json({ status });
 });
 
-// clean up redis keys
-// make the chat ui
-// take context of previous chats
-//chat screen ui
-//add firebase auth
-//
+async function getPrevConversation(email, fileId) {
+  const { data: history } = await supClient
+    .from("chat_history")
+    .select("role,message")
+    .eq("email", email)
+    .eq("file_id", fileId)
+    .order("created_at", { ascending: true })
+    .limit(10); // last 5 interactions
+
+  const chatHistory = history
+    .map((h) => `${h.role === "user" ? "User" : "AI"}: ${h.message}`)
+    .join("\n");
+  return chatHistory;
+}
