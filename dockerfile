@@ -8,18 +8,18 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm install --only=production
 
-# Copy all source files
+# Copy all source files (excluding those in .dockerignore)
 COPY . .
 
-# Ensure upload directory exists (useful if your app assumes it)
+# Ensure upload directory exists (if needed by your app)
 RUN mkdir -p upload
 
 # Copy and give execution permission to the entrypoint script
 COPY entrypoint.sh .
 RUN chmod +x entrypoint.sh
 
-# Expose port (if your app runs on 3000 or other)
-EXPOSE 3000
+# Expose app port (adjust if needed)
+EXPOSE 8080
 
-# Start server and worker
+# Start both server and worker
 CMD ["./entrypoint.sh"]
