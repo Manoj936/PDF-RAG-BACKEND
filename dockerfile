@@ -4,22 +4,18 @@ FROM node:18-slim
 # Set working directory
 WORKDIR /app
 
-# Copy package files and install only production dependencies
+# Install only production dependencies
 COPY package*.json ./
 RUN npm install --only=production
 
-# Copy all source files (excluding those in .dockerignore)
+# Copy source files
 COPY . .
 
-# Ensure upload directory exists (if needed by your app)
+# Create upload folder if needed
 RUN mkdir -p upload
 
-# Copy and give execution permission to the entrypoint script
-COPY entrypoint.sh .
-RUN chmod +x entrypoint.sh
-
-# Expose app port (adjust if needed)
+# Expose your app port
 EXPOSE 8080
 
-# Start both server and worker
-CMD ["./entrypoint.sh"]
+# Run both server and worker
+CMD bash -c "node server.js & node worker.js"
