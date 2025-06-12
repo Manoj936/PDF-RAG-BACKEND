@@ -1,10 +1,9 @@
 #!/bin/bash
 
-# Exit on error
 set -e
 
-# Start the server in the background
+echo "🔧 Starting server..."
 node server.js &
 
-# Start the worker in the foreground (to keep container running)
+echo "👷 Starting worker..."
 node worker.js
