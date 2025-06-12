@@ -22,7 +22,7 @@ const embeddings = new OpenAIEmbeddings({
 });
 const llm = new ChatOpenAI({ openAIApiKey });
 dotenv.config();
-
+import "./worker.js"; // 👈 Import and start the worker
 //SETTING UP SUPABASE CLIENT
 const supClient = createClient(supabaseUrl, supabaseApikey);
 //storage setup

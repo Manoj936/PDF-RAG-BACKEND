@@ -18,4 +18,4 @@ RUN mkdir -p upload
 EXPOSE 8080
 
 # Run both server and worker
-CMD bash -c "node server.js & node worker.js"
+CMD bash -c "node server.js"
