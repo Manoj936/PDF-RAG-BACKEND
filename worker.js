@@ -75,7 +75,8 @@ const worker = new Worker(
         }
       });
     } catch (e) {
-      console.log("error", e);
+      console.error("❌ Error occurred:", e);
+      console.error("📄 Job data:", data);
       await fs.unlink(data.path, (err) => {
         if (err) {
           console.error("❌ Error deleting file:", err);
