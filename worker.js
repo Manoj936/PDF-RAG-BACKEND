@@ -5,7 +5,11 @@ import { createClient } from "@supabase/supabase-js";
 // Langchain imports
 import { SupabaseVectorStore } from "@langchain/community/vectorstores/supabase";
 import { OpenAIEmbeddings } from "@langchain/openai";
-import { PDFLoader } from "@langchain/community/document_loaders/fs/pdf";
+
+import { PDFLoader } from "@langchain/community/document_loaders/fs/pdf"; //👈🏼 used for pdf parshing
+import { DocxLoader } from "@langchain/community/document_loaders/fs/docx"; //👈🏼 used for doc parshing
+
+import { OpenAIWhisperAudio } from "@langchain/community/document_loaders/fs/openai_whisper_audio"; //👈🏼 used for audio parshing
 import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
 
 import fs from "fs";
@@ -28,8 +32,21 @@ const worker = new Worker(
   async (job) => {
     const data = JSON.parse(job.data);
     try {
-      // Pdf processing
-      const loader = new PDFLoader(data.path);
+      // File processing
+      let loader;
+      console.log(data.fileType , "🗃️")
+      if (data.fileType == "pdf") {
+        //pdf parsing
+        loader = new PDFLoader(data.path);
+      } else if ( data.fileType == "docx") {
+        //doc parsing
+        loader = new DocxLoader(data.path, {
+          type: data.fileType,
+        });
+      }else{
+        throw new Error("Unsupported file type");
+      }
+
       const docs = await loader.load();
       console.log(typeof docs);
       const splitter = new RecursiveCharacterTextSplitter({
