@@ -22,15 +22,6 @@ const embeddings = new OpenAIEmbeddings({
   apiKey: openAIKey,
 });
 
-console.log("👷 Worker started...");
-
-console.log("✅ ENV CHECK:", {
-  REDIS_QUEUE_NAME: process.env.REDIS_QUEUE_NAME,
-  REDIS_PASS: !!process.env.REDIS_PASS,
-  SUPABASE_URL: process.env.SUPABASE_PROJECT_URL,
-  SUPABASE_API_KEY: !!process.env.SUPABASE_API_KEY,
-  OPENAI_KEY: !!process.env.OPENAI_KEY,
-});
 //subscriber for doc upload events
 const worker = new Worker(
   process.env.REDIS_QUEUE_NAME,
@@ -78,13 +69,13 @@ const worker = new Worker(
       // 🧹 Delete file after processing
       await fs.unlink(data.path, (err) => {
         if (err) {
-          console.error("❌ Error deleting file:", err);
+          console.log("❌ Error deleting file:", err);
         } else {
           console.log(`🗑️ Deleted file: ${data.path}`);
         }
       });
     } catch (e) {
-      console.error("❌ Job processing error:", e);
+      console.log("❌ Job processing error:", e);
       if (data?.path) {
         try {
           await fs.promises.unlink(data.path);

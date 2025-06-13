@@ -23,6 +23,8 @@ const embeddings = new OpenAIEmbeddings({
 const llm = new ChatOpenAI({ openAIApiKey });
 dotenv.config();
 import "./worker.js"; // 👈 Import and start the worker
+import { Ratelimiter } from "./helper/rateLimiter.js";
+
 //SETTING UP SUPABASE CLIENT
 const supClient = createClient(supabaseUrl, supabaseApikey);
 //storage setup
@@ -46,8 +48,11 @@ const pdfUploadQueue = new bullmq.Queue(process.env.REDIS_QUEUE_NAME, {
   connection: redis,
 });
 
+
+
 // receive files using multer api
-app.post("/upload/pdf", upload.single("pdf"), async (req, res) => {
+app.post("/upload/pdf",   Ratelimiter('upload/pdf' , 1 , 300) , upload.single("pdf"), async (req, res) => {
+
   const fileId = `${Date.now()}-${req.file.originalname}`;
   const email = req.body.email;
   // Save initial status
@@ -69,7 +74,8 @@ app.post("/upload/pdf", upload.single("pdf"), async (req, res) => {
 
 // chat api which converts user query to embedded vectors and return SIMILAR TYPE results
 
-app.get("/chat", async (req, res) => {
+app.get("/chat",  Ratelimiter('chat' , 10 , 60) ,  async (req, res) => {
+
   const userMSg = req.query.message;
   const fileId = req.query.fileId;
   const email = req.query.email;
@@ -93,12 +99,29 @@ app.get("/chat", async (req, res) => {
 
   const result = await retriver.invoke(userQuery);
   const chatHistory = await getPrevConversation(email, fileId);
-  console.log(chatHistory , "🧠")
-  const LLM_PROMPT = `You are a helpful and enthusiastic support bot who can answer a given question about the context provided. Try to find the answer in detail from the context. If you really don't know the answer, say "I'm sorry, I don't know find an appropriate answer". Don't try to make up an answer. Always speak as if you were chatting to a friend. 
-    Context: {result}
-    Previous Conversation: {chatHistory}
-    Question: {question}
-    User's Registered Email: {email}`;
+  console.log(chatHistory, "🧠")
+  const LLM_PROMPT = `
+  You are a helpful and friendly support assistant. You answer user questions based on the provided document context and optionally prior chat history.
+  
+  Respond with:
+  - A friendly and conversational tone.
+  - Factual answers only when they exist in the provided context.
+  - If the question is a casual greeting like "hi", "hello", or "how are you", respond warmly and naturally.
+  - If the answer is not found in the context and the question is not a greeting, respond with:
+    "I'm sorry, I couldn't find an appropriate answer in the document."
+  
+  Information provided:
+  -------------------------
+  Context: {result}
+  
+  Previous Conversation: {chatHistory}
+  
+  User Question: {question}
+  User Email: {email}
+  -------------------------
+  
+  Answer:
+  `;
 
   const LLMpromtTemplate = PromptTemplate.fromTemplate(LLM_PROMPT);
 
@@ -107,7 +130,7 @@ app.get("/chat", async (req, res) => {
   const AIResponse = await AIRESPONSE_CHAIN.invoke({
     result: JSON.stringify(result),
     question: userMSg,
-    chatHistory : chatHistory,
+    chatHistory: chatHistory,
     email: email,
   });
   //chat history can be added here
