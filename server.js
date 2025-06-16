@@ -52,7 +52,7 @@ const pdfUploadQueue = new bullmq.Queue(process.env.REDIS_QUEUE_NAME, {
 // receive files using multer api
 app.post(
   "/upload/pdf",
-  Ratelimiter("upload/pdf", 3, 60),
+  Ratelimiter("upload/pdf", 2 , 300),
   upload.single("pdf"),
   async (req, res) => {
     try {

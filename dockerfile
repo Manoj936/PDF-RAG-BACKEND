@@ -14,8 +14,8 @@ COPY . .
 # Create upload folder if needed
 RUN mkdir -p upload
 
-# Expose your app port
+# Expose app port
 EXPOSE 8080
 
-# Run both server and worker
-CMD bash -c "node server.js"
+# Run both server and worker in background
+CMD bash -c "node server.js & node worker.js & wait"
