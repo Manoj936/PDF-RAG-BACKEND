@@ -5,7 +5,7 @@ FROM node:18-slim
 WORKDIR /app
 
 # Install only production dependencies
-COPY package*.json ./
+COPY package.json ./
 RUN npm install --only=production
 
 # Copy source files
