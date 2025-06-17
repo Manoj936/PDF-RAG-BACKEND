@@ -2,16 +2,15 @@ import express from "express";
 const app = express();
 import cors from "cors";
 import multer from "multer";
-import redis from "./helper/redisClient.js";
 app.use(cors());
 app.use(express.json());
-import path from 'path';
+import path from "path";
 import { ChatOpenAI } from "@langchain/openai";
 import { OpenAIEmbeddings } from "@langchain/openai";
 import { PromptTemplate } from "@langchain/core/prompts";
 import { createClient } from "@supabase/supabase-js";
 import { SupabaseVectorStore } from "@langchain/community/vectorstores/supabase";
-import bullmq from "bullmq";
+
 import dotenv from "dotenv";
 import { standaloneQuestionGenerator } from "./helper/standaloneClient.js";
 const openAIApiKey = process.env.OPENAI_KEY;
@@ -24,10 +23,7 @@ const embeddings = new OpenAIEmbeddings({
 const llm = new ChatOpenAI({ openAIApiKey });
 dotenv.config();
 
-import { Ratelimiter } from "./helper/rateLimiter.js";
-import { createWorker } from "./worker.js";
-
-
+import { DocumentWorker } from "./worker.js";
 
 const supClient = createClient(supabaseUrl, supabaseApikey);
 //storage setup
@@ -47,50 +43,36 @@ app.listen(8000, () => {
   console.log("Server is running on port 8000");
 });
 
-const pdfUploadQueue = new bullmq.Queue(process.env.REDIS_QUEUE_NAME, {
-  connection: redis,
-});
-
 // receive files using multer api
-app.post(
-  "/upload/pdf",
-  Ratelimiter("upload/pdf", 3, 60),
-  upload.single("pdf"),
-  async (req, res) => {
-    try {
-      const fileId = `${Date.now()}-${req.file.originalname}`;
-      const email = req.body.email;
-      const fileType = path.extname(req.file.originalname).toLowerCase().substring(1);
-      // Save initial status
-      await redis.set(`status:${fileId}`, "processing");
-      console.log(fileType);
+app.post("/upload/pdf", upload.single("pdf"), async (req, res) => {
+  try {
+    const fileId = `${Date.now()}-${req.file.originalname}`;
+    const email = req.body.email;
+    const fileType = path
+      .extname(req.file.originalname)
+      .toLowerCase()
+      .substring(1);
 
-      await pdfUploadQueue.add(
-        "file-ready",
-        JSON.stringify({
-          filename: req.file.originalname,
-          destination: req.file.destination,
-          path: req.file.path,
-          fileType,
-          fileId,
-          email,
-        })
-      );
-
-      const worker = createWorker()
-      await worker.run();           
-  
-      return res.json({ message: "uploaded", fileId });
-    } catch (err) {
-      console.log(err);
-      return res.status(500).json({ message: "Error processing file" });
-    }
+      await DocumentWorker(
+      JSON.stringify({
+        filename: req.file.originalname,
+        destination: req.file.destination,
+        path: req.file.path,
+        fileType,
+        fileId,
+        email,
+      }),
+      res
+    );
+  } catch (err) {
+    console.log(err);
+    return res.status(500).json({ message: "Error processing file" });
   }
-);
+});
 
 // chat api which converts user query to embedded vectors and return SIMILAR TYPE results
 
-app.get("/chat", Ratelimiter("chat", 10, 60), async (req, res) => {
+app.get("/chat", async (req, res) => {
   const userMSg = req.query.message;
   const fileId = req.query.fileId;
   const email = req.query.email;
@@ -150,7 +132,7 @@ app.get("/chat", Ratelimiter("chat", 10, 60), async (req, res) => {
     question: userMSg,
     chatHistory: chatHistory,
     email: email,
-    filename: filename
+    filename: filename,
   });
   //chat history can be added here
   await supClient.from("chat_history").insert([
@@ -161,12 +143,6 @@ app.get("/chat", Ratelimiter("chat", 10, 60), async (req, res) => {
     message: AIResponse.content,
     docs: result,
   });
-});
-
-//check the file processing status
-app.get("/status/:fileId", async (req, res) => {
-  const status = await redis.get(`status:${req.params.fileId}`);
-  return res.json({ status });
 });
 
 async function getPrevConversation(email, fileId) {
