@@ -109,7 +109,9 @@ const worker = new Worker(
   },
   {
     concurrency: 100,
-    connection: redis
+    connection: {
+      url: `rediss://default:${process.env.REDIS_PASS}@real-stinkbug-39224.upstash.io:6379`,
+    },
   }
 );
 
