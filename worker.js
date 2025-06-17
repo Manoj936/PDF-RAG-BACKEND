@@ -27,23 +27,26 @@ const embeddings = new OpenAIEmbeddings({
 });
 
 //subscriber for doc upload events
-const worker = new Worker(
-  process.env.REDIS_QUEUE_NAME,
-  async (job) => {
-    const data = JSON.parse(job.data);
-    try {
+
+// convert to a factory function
+export const createWorker = () => {
+  const worker = new Worker(
+    process.env.REDIS_QUEUE_NAME,
+    async (job) => {
+      const data = JSON.parse(job.data);
+      try {
       // File processing
       let loader;
-      console.log(data.fileType , "🗃️")
+      console.log(data.fileType, "🗃️")
       if (data.fileType == "pdf") {
         //pdf parsing
         loader = new PDFLoader(data.path);
-      } else if ( data.fileType == "docx") {
+      } else if (data.fileType == "docx") {
         //doc parsing
         loader = new DocxLoader(data.path, {
           type: data.fileType,
         });
-      }else{
+      } else {
         throw new Error("Unsupported file type");
       }
 
@@ -80,49 +83,44 @@ const worker = new Worker(
         });
       }
 
-      await redis.set(`status:${data.fileId}`, "processed");
-      console.log(`All docs are added to vector store ✅`);
+        await redis.set(`status:${data.fileId}`, "processed");
+        console.log(`✅ All docs added to vector store`);
 
-      // 🧹 Delete file after processing
-      await fs.unlink(data.path, (err) => {
-        if (err) {
-          console.log("❌ Error deleting file:", err);
-        } else {
-          console.log(`🗑️ Deleted file: ${data.path}`);
-        }
-      });
-    } catch (e) {
-      console.log("❌ Job processing error:", e);
-      if (data?.path) {
-        try {
-          await fs.promises.unlink(data.path);
-          console.log("🗑️ Cleanup: File deleted after failure");
-        } catch (delErr) {
-          console.error("❌ Cleanup: Failed to delete file:", delErr);
-        }
+        await fs.promises.unlink(data.path);
+        console.log(`🗑️ Deleted file: ${data.path}`);
+      } catch (e) {
+        console.log("❌ Job processing error:", e);
+        if (data?.path) await fs.promises.unlink(data.path).catch(() => {});
+        if (data?.fileId) await redis.set(`status:${data.fileId}`, "failed");
       }
-
-      if (data?.fileId) {
-        await redis.set(`status:${data.fileId}`, "failed");
-      }
-    }
-  },
-  {
-    concurrency: 100,
-    connection: {
-      url: `rediss://default:${process.env.REDIS_PASS}@real-stinkbug-39224.upstash.io:6379`,
     },
-  }
-);
+    {
+      concurrency: 1,
+      connection: {
+        url: `redis://default:${process.env.REDIS_PASS}@selected-horse-49863.upstash.io:6379`
+      },
+      autorun: false,
+    }
+  );
 
-worker.on("completed", (job) => {
-  console.log(`✅ Job ${job.id} completed.`);
-});
+  worker.on("completed", async (job) => {
+    await worker.close();
+    console.log(`✅ Job ${job.id} completed.`);
+  });
 
-worker.on("failed", (job, err) => {
-  console.error(`❌ Job ${job.id} failed with error:`, err);
-});
+  worker.on("failed", async (job, err) => {
+    await worker.close();
+    console.error(`❌ Job ${job.id} failed`, err);
+  });
 
-worker.on("error", (err) => {
-  console.error("❌ Worker encountered an internal error:", err);
-});
+  worker.on("error", async (err) => {
+    await worker.close();
+    console.error("❌ Worker error", err);
+  });
+
+  return worker;
+};
+
+
+
+

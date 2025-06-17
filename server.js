@@ -25,6 +25,8 @@ const llm = new ChatOpenAI({ openAIApiKey });
 dotenv.config();
 
 import { Ratelimiter } from "./helper/rateLimiter.js";
+import { createWorker } from "./worker.js";
+
 
 
 const supClient = createClient(supabaseUrl, supabaseApikey);
@@ -75,6 +77,9 @@ app.post(
         })
       );
 
+      const worker = createWorker()
+      await worker.run();           
+  
       return res.json({ message: "uploaded", fileId });
     } catch (err) {
       console.log(err);
@@ -145,7 +150,7 @@ app.get("/chat", Ratelimiter("chat", 10, 60), async (req, res) => {
     question: userMSg,
     chatHistory: chatHistory,
     email: email,
-    filename :filename
+    filename: filename
   });
   //chat history can be added here
   await supClient.from("chat_history").insert([
