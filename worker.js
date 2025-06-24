@@ -102,12 +102,19 @@ export const WebScrapperWorker = async (rawData, res) => {
 
     // Instantiate loader with optional selector to trim content
     const loader = new CheerioWebBaseLoader(url, {
-      selector: "article p, h1, h2, h3, .author, .date, header, main"
+      selector: "body", // broader selector
     });
 
     // Load the documents
-    const docs = await loader.load();
-    console.log("Documents:", docs);
+    let docs = await loader.load();
+    docs = docs.map(doc => ({
+      ...doc,
+      pageContent: doc.pageContent
+        .replace(/<[^>]+>/g, "")   // remove HTML tags
+        .replace(/\s+/g, " ")      // normalize whitespace
+        .trim(),
+    }));
+    console.log("📄 Loaded Docs from Web:", docs.map(d => d.pageContent.slice(0, 100)));
     const splitter = new RecursiveCharacterTextSplitter({
       chunkSize: 500, // smaller chunk size
       separators: ["\n\n", "\n", " ", ""],

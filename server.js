@@ -35,9 +35,7 @@ import {
   isUrlReachable,
 } from "./helper/scrapperHelper.js";
 import {
-  fileUploadRequest,
   greetingKeywords,
-  webUrlScrappingRequest,
 } from "./helper/constant.js";
 
 const supClient = createClient(supabaseUrl, supabaseApikey);
@@ -135,12 +133,13 @@ app.get("/chat", async (req, res) => {
     queryName: "match_documents",
     filter: { file_id: fileId, email: email }, // 👈 filter by file_id and email
   });
-
+  console.log(fileId,email , '😔')
   const retriver = vectorStore.asRetriever({ k: 2 });
-
+  console.log("🔍 Retrieving documents for query:", userQuery);
   const result = await retriver.invoke(userQuery);
+  console.log("🧠 Retriever Result:", result);
   const chatHistory = await getPrevConversation(email, fileId);
-  console.log(chatHistory, "🧠");
+
   // 1. System prompt: sets the assistant's behavior
   const systemMessage = SystemMessagePromptTemplate.fromTemplate(`
 You are a helpful and friendly support assistant. You answer user questions based on the provided document context which can be html or simple text and optionally prior chat history.
@@ -152,6 +151,8 @@ Respond with:
 - Also note this system accept pdf , docx upload to chat as well as web url scrapping request.
 - If the question is related to a file upload, ensure you reference the file name in your respone.
 - If the question is related to a web url scrapping, ensure you reference the url in your response.
+- Always provide the response short and precise in details from the available context.
+- You need to think before answer.
 - If File Name is null then it must be a web url scrapping request.
 - If Url Name is null then it must be a file upload request.
 `);
