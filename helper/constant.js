@@ -1,5 +1,5 @@
-export const webUrlScrappingRequest = "web url scraping";
-export const fileUploadRequest = "file chat";
+export const webUrlScrappingRequest = "web_url_scraping";
+export const fileUploadRequest = "file_chat";
 export const greetingKeywords = [
     "hi", "hii", "hiii",
     "hello", "hey", "hey there", "heya",

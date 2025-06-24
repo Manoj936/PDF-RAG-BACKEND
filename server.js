@@ -94,7 +94,7 @@ app.get("/chat", async (req, res) => {
   const filename = req.query.filename;
   const url = req.query.url;
   const requestType = req.query.requestType;
-
+  console.log(userMSg, fileId, email, filename, url, requestType);
   if (!requestType) {
     return res.status(400).json({ message: "Invalid request", status: false });
   }
@@ -215,7 +215,7 @@ app.post("/scraper", async (req, res) => {
       //Call worker to process the url scrapping
       const fileId = `url_${Date.now()}-${url
         .replace(/[^a-zA-Z0-9]/g, "_")
-        .slice(0, 5)}`;
+        .slice(0, 10)}`;
       // Here you can implement the logic to scrape the URL and process the data
 
       await WebScrapperWorker(JSON.stringify({ url, email, fileId }), res);
