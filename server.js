@@ -7,12 +7,7 @@ app.use(express.json());
 import path from "path";
 import { ChatOpenAI } from "@langchain/openai";
 import { OpenAIEmbeddings } from "@langchain/openai";
-import {
-  ChatPromptTemplate,
-  HumanMessagePromptTemplate,
-  PromptTemplate,
-  SystemMessagePromptTemplate,
-} from "@langchain/core/prompts";
+import { HumanMessage  , AIMessage} from "@langchain/core/messages";
 import { createClient } from "@supabase/supabase-js";
 import { SupabaseVectorStore } from "@langchain/community/vectorstores/supabase";
 
@@ -37,6 +32,9 @@ import {
 import {
   greetingKeywords,
 } from "./helper/constant.js";
+import { ChatPromptTemplate, HumanMessagePromptTemplate, SystemMessagePromptTemplate } from "@langchain/core/prompts";
+import { human_template_01, system_template_01 } from "./helper/template.js";
+
 
 const supClient = createClient(supabaseUrl, supabaseApikey);
 //storage setup
@@ -141,38 +139,10 @@ app.get("/chat", async (req, res) => {
   const chatHistory = await getPrevConversation(email, fileId);
 
   // 1. System prompt: sets the assistant's behavior
-  const systemMessage = SystemMessagePromptTemplate.fromTemplate(`
-You are a helpful and friendly support assistant. You answer user questions based on the provided document context which can be html or simple text and optionally prior chat history.
-
-Respond with:
-- A friendly and conversational tone.
-- Factual answers only when they exist in the provided context.
-- If the answer is not found in the context and the question is not a greeting , then try to respond with "I don't know" or "I am not sure" to avoid making up information.
-- Also note this system accept pdf , docx upload to chat as well as web url scrapping request.
-- If the question is related to a file upload, ensure you reference the file name in your respone.
-- If the question is related to a web url scrapping, ensure you reference the url in your response.
-- Always provide the response short and precise in details from the available context.
-- You need to think before answer.
-- If File Name is null then it must be a web url scrapping request.
-- If Url Name is null then it must be a file upload request.
-`);
+  const systemMessage = SystemMessagePromptTemplate.fromTemplate(system_template_01);
 
   // 2. Human message: contains the actual dynamic content
-  const humanMessage = HumanMessagePromptTemplate.fromTemplate(`
-Information provided:
--------------------------
-Context: {result}
-
-Previous Conversation: {chatHistory}
-
-User Question: {question}
-User Email: {email}
-File Name : {filename}
-Url Name : {url}
--------------------------
-
-Answer:
-`);
+  const humanMessage = HumanMessagePromptTemplate.fromTemplate(human_template_01);
 
   // 3. Create full chat prompt
   const chatPrompt = ChatPromptTemplate.fromMessages([
@@ -240,8 +210,21 @@ async function getPrevConversation(email, reference) {
     .order("created_at", { ascending: true })
     .limit(10); // last 5 interactions
 
-  const chatHistory = history
-    .map((h) => `${h.role === "user" ? "User" : "AI"}: ${h.message}`)
-    .join("\n");
+
+   console.log(history , "📔📔") 
+
+   
+  const chatHistory = [];
+  history.forEach((item) => {
+    if (item.role === "user") {
+      chatHistory.push(new HumanMessage(item.message));
+    } else {
+      chatHistory.push(new AIMessage(item.message));
+    }
+    
+  })
+  console.log('****************************');
+  console.log(chatHistory);
+  console.log('****************************')
   return chatHistory;
 }
