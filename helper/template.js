@@ -11,14 +11,14 @@ Respond with:
 - You need to think before answer.
 - If File Name is null then it must be a web url scrapping request.
 - If Url Name is null then it must be a file upload request.
+- Please use chat history context for previous conversation.
+- If user ask about the chat history then please provide the chat history in the response.
 `;
 
 export const human_template_01 = `
 Information provided:
 -------------------------
 Context: {result}
-
-Previous Conversation: {chatHistory}
 
 User Question: {question}
 User Email: {email}

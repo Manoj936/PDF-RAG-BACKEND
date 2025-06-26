@@ -32,7 +32,7 @@ import {
 import {
   greetingKeywords,
 } from "./helper/constant.js";
-import { ChatPromptTemplate, HumanMessagePromptTemplate, SystemMessagePromptTemplate } from "@langchain/core/prompts";
+import { ChatPromptTemplate, HumanMessagePromptTemplate, MessagesPlaceholder, SystemMessagePromptTemplate } from "@langchain/core/prompts";
 import { human_template_01, system_template_01 } from "./helper/template.js";
 import {
     StringOutputParser,
@@ -150,13 +150,14 @@ app.get("/chat", async (req, res) => {
   // 3. Create full chat prompt
   const chatPrompt = ChatPromptTemplate.fromMessages([
     systemMessage,
+    new MessagesPlaceholder("chatHistory"),
     humanMessage,
   ]);
 
   // 4. Chain it to your LLM
   const AIRESPONSE_CHAIN = chatPrompt.pipe(llm).pipe(new StringOutputParser());
 
-  // 5. Invoke with your variables
+  // 5. Invoke with your variables  
   const AIResponse = await AIRESPONSE_CHAIN.invoke({
     result: JSON.stringify(result),
     question: userMSg,
@@ -165,7 +166,7 @@ app.get("/chat", async (req, res) => {
     filename: filename ? filename : "null",
     url: url ? url : "null",
   });
-  console.log(AIResponse , "🤖")
+
   //chat history can be added here
   await supClient.from("chat_history").insert([
     { email, ref_id: fileId, role: "user", message: userMSg },
