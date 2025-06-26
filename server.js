@@ -7,10 +7,10 @@ app.use(express.json());
 import path from "path";
 import { ChatOpenAI } from "@langchain/openai";
 import { OpenAIEmbeddings } from "@langchain/openai";
-import { HumanMessage  , AIMessage} from "@langchain/core/messages";
+import { HumanMessage, AIMessage } from "@langchain/core/messages";
 import { createClient } from "@supabase/supabase-js";
 import { SupabaseVectorStore } from "@langchain/community/vectorstores/supabase";
-
+import {RunnableSequence} from "@langchain/core/runnables"
 import dotenv from "dotenv";
 import { standaloneQuestionGenerator } from "./helper/standaloneClient.js";
 const openAIApiKey = process.env.OPENAI_KEY;
@@ -29,15 +29,15 @@ import {
   isHtmlContent,
   isUrlReachable,
 } from "./helper/scrapperHelper.js";
+import { greetingKeywords } from "./helper/constant.js";
 import {
-  greetingKeywords,
-} from "./helper/constant.js";
-import { ChatPromptTemplate, HumanMessagePromptTemplate, MessagesPlaceholder, SystemMessagePromptTemplate } from "@langchain/core/prompts";
+  ChatPromptTemplate,
+  HumanMessagePromptTemplate,
+  MessagesPlaceholder,
+  SystemMessagePromptTemplate,
+} from "@langchain/core/prompts";
 import { human_template_01, system_template_01 } from "./helper/template.js";
-import {
-    StringOutputParser,
-} from "@langchain/core/output_parsers";
-
+import { StringOutputParser } from "@langchain/core/output_parsers";
 
 const supClient = createClient(supabaseUrl, supabaseApikey);
 //storage setup
@@ -93,7 +93,7 @@ app.get("/chat", async (req, res) => {
   const filename = req.query.filename;
   const url = req.query.url;
   const requestType = req.query.requestType;
-  console.log(userMSg, fileId, email, filename, url, requestType);
+
   if (!requestType) {
     return res.status(400).json({ message: "Invalid request", status: false });
   }
@@ -134,7 +134,7 @@ app.get("/chat", async (req, res) => {
     queryName: "match_documents",
     filter: { file_id: fileId, email: email }, // 👈 filter by file_id and email
   });
-  console.log(fileId,email , '😔')
+  console.log(fileId, email, "😔");
   const retriver = vectorStore.asRetriever({ k: 2 });
   console.log("🔍 Retrieving documents for query:", userQuery);
   const result = await retriver.invoke(userQuery);
@@ -142,10 +142,12 @@ app.get("/chat", async (req, res) => {
   const chatHistory = await getPrevConversation(email, fileId);
 
   // 1. System prompt: sets the assistant's behavior
-  const systemMessage = SystemMessagePromptTemplate.fromTemplate(system_template_01);
+  const systemMessage =
+    SystemMessagePromptTemplate.fromTemplate(system_template_01);
 
   // 2. Human message: contains the actual dynamic content
-  const humanMessage = HumanMessagePromptTemplate.fromTemplate(human_template_01);
+  const humanMessage =
+    HumanMessagePromptTemplate.fromTemplate(human_template_01);
 
   // 3. Create full chat prompt
   const chatPrompt = ChatPromptTemplate.fromMessages([
@@ -155,10 +157,14 @@ app.get("/chat", async (req, res) => {
   ]);
 
   // 4. Chain it to your LLM
-  const AIRESPONSE_CHAIN = chatPrompt.pipe(llm).pipe(new StringOutputParser());
-
-  // 5. Invoke with your variables  
-  const AIResponse = await AIRESPONSE_CHAIN.invoke({
+  const AI_Sequesnce =  RunnableSequence.from([
+    chatPrompt ,
+    llm,
+    new StringOutputParser( )
+  ])
+ 
+  // 5. Invoke with your variables
+  const AIResponse = await AI_Sequesnce.invoke({
     result: JSON.stringify(result),
     question: userMSg,
     chatHistory: chatHistory,
@@ -215,10 +221,8 @@ async function getPrevConversation(email, reference) {
     .order("created_at", { ascending: true })
     .limit(10); // last 5 interactions
 
+  console.log(history, "📔📔");
 
-   console.log(history , "📔📔") 
-
-   
   const chatHistory = [];
   history.forEach((item) => {
     if (item.role === "user") {
@@ -226,10 +230,9 @@ async function getPrevConversation(email, reference) {
     } else {
       chatHistory.push(new AIMessage(item.message));
     }
-    
-  })
-  console.log('****************************');
+  });
+  console.log("****************************");
   console.log(chatHistory);
-  console.log('****************************')
+  console.log("****************************");
   return chatHistory;
 }
